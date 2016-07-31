@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# NOTES
+# Change the exec command to fit your use case, i.e. exec /usr/bin/qemu-system-x86_64.
+# Change the pcie assignments to that of your GPU(s).
+
+exec /usr/bin/qemu-kvm \
+ `echo "\$@" | \
+ sed 's|02:00.0|02:00.0,x-vga=on|g' | \
+ sed 's|03:00.0|03:00.0,x-vga=on|g'`
