@@ -1,20 +1,89 @@
 #!/bin/sh
 
-# Back up grub
+function print_warning ()
+{
+	clear
+	echo "Make sure your boot partion is mounted BEFORE continuing with this script!"
+	echo "Press \"Enter\" to continue, or ctrl+c to quit."
+	echo
+	read
+}
 
-if [ ! -e /etc/default/grub.orig ]
-then
-	cp /etc/default/grub /etc/default/grub.orig
-fi
+function get_params1 ()
+{
+        cpu_string=`cat /proc/cpuinfo | grep vendor_id | head -n 1`
+        cpu_type=`sed "s/vendor_id : //g" <<< $cpu_string`
 
+        case $cpu_type in
+        GenuineIntel)
+                params='rd.driver.pre=vfio-pci intel_iommu=on vfio_iommu_type1 pcie_acs_override=downstream'
+                ;;
+        AuthenticAMD)
+                params='rd.driver.pre=vfio-pci amd_iommu=on vfio_iommu_type1 pcie_acs_override=downstream iommu=pt iommu=1'
+                ;;
+	*)
+		echo "Unknown processor. Please contribute to this script!"
+		exit
+		;;
+        esac
 
-# Add boot params
-# Be sure to modify for your use case. This is for an intel processor.
-# Make sure your boot partition is mounted
+        echo "CPU is \"$cpu_type\". Boot params will include: \"$params\"."
+        echo "Is this correct? y/n"
+        read input_cpu
 
-params='rd.driver.pre=vfio-pci intel_iommu=on vfio_iommu_type1 pcie_acs_override=downstream'
-sed "s/GRUB_CMDLINE_LINUX=\"\(.*\)\"/GRUB_CMDLINE_LINUX=\"\1 $params\"/" /etc/default/grub.orig > /etc/default/grub.tmp
-mv /etc/default/grub.tmp /etc/default/grub
+        case $input_cpu in
+        y*)
+                ;;
+        n*)
+                echo "Please edit the script for proper params. This script will now exit."
+                exit
+                ;;
+        *)
+                echo "Invalid Input"
+                get_params1
+                ;;
+        esac
+}
+
+function get_params2 ()
+{
+        echo "Allow unsafe interupts? y/n"
+        read input_unsafe
+
+        case $input_unsafe in
+        y*)
+                params="$params allow_unsafe_interrupts=1"
+                echo "Boot parameters will include: \"$params\"."
+                ;;
+        n*)
+                echo "Boot parameters will include: \"$params\"."
+                ;;
+        *)
+                echo "Invalid Input"
+                get_params2
+                ;;
+        esac
+}
+
+function backup_grub ()
+{
+	if [ ! -e /etc/default/grub.orig ]
+	then
+		cp /etc/default/grub /etc/default/grub.orig
+	fi
+}
+
+function add_params ()
+{
+	sed "s/GRUB_CMDLINE_LINUX=\"\(.*\)\"/GRUB_CMDLINE_LINUX=\"\1 $params\"/" /etc/default/grub.orig > /etc/default/grub.tmp
+	mv /etc/default/grub.tmp /etc/default/grub
+}
+
+print_warning
+get_params1
+get_params2
+backup_grub
+add_params
 
 
 # Back up /etc/modprobe.d/local.conf if it exists
