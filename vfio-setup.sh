@@ -28,7 +28,7 @@ function get_params1 ()
         esac
 
         echo "CPU is \"$cpu_type\". Boot params will include: \"$params\"."
-        echo "Is this correct? y(es)/n(o)/s(kip)"
+        echo "Is this correct? (y)es/(n)o/(s)kip"
         read input_cpu
 
         case $input_cpu in
@@ -51,7 +51,7 @@ function get_params1 ()
 
 function get_params2 ()
 {
-        echo "Allow unsafe interupts? y(es)/n(o)"
+        echo "Allow unsafe interupts? (y)es/(n)o"
         read input_unsafe
 
         case $input_unsafe in
