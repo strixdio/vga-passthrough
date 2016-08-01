@@ -85,6 +85,8 @@ get_params2
 backup_grub
 add_params
 
+echo "Press \"Enter\" to continue, or ctrl+c to quit."
+read
 
 # Back up /etc/modprobe.d/local.conf if it exists
 # Add /etc/modprobe.d/local.conf
