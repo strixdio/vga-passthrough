@@ -28,7 +28,7 @@ function get_params1 ()
         esac
 
         echo "CPU is \"$cpu_type\". Boot params will include: \"$params\"."
-        echo "Is this correct? y/n"
+        echo "Is this correct? y(es)/n(o)/s(kip)"
         read input_cpu
 
         case $input_cpu in
@@ -38,6 +38,10 @@ function get_params1 ()
                 echo "Please edit the script for proper params. This script will now exit."
                 exit
                 ;;
+	s*)
+		echo "Skipping boot param modifications"
+		params=""
+		;;
         *)
                 echo "Invalid Input"
                 get_params1
@@ -47,7 +51,7 @@ function get_params1 ()
 
 function get_params2 ()
 {
-        echo "Allow unsafe interupts? y/n"
+        echo "Allow unsafe interupts? y(es)/n(o)"
         read input_unsafe
 
         case $input_unsafe in
@@ -79,11 +83,15 @@ function add_params ()
 	mv /etc/default/grub.tmp /etc/default/grub
 }
 
+
 print_warning
-get_params1
-get_params2
 backup_grub
-add_params
+get_params1
+if [ ! "$params" == "" ]
+then
+	get_params2
+	add_params
+fi
 
 echo "Press \"Enter\" to continue, or ctrl+c to quit."
 read
