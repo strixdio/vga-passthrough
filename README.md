@@ -2,6 +2,7 @@
 
 # vga-passthrough using vfio
 # Most of the work is from Alex Williamson, from https://vfio.blogspot.com/2015/05/vfio-gpu-how-to-series-part-1-hardware.html. Please use his material for configuring this script to your use case.
+# Alex Williamson's VFIO+VGA FAQ: https://vfio.blogspot.com/2014/08/vfiovga-faq.html
 # I only organized it in a way to make vga-passthrough setup easier.
 # You are welcome to use it, but I am not responsible for any damages.
 

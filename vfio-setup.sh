@@ -9,17 +9,20 @@ function print_warning ()
 	read
 }
 
-function get_params1 ()
+function get_cpu_params ()
 {
+
+	params="rd.driver.pre=vfio-pci"
+
         cpu_string=`cat /proc/cpuinfo | grep vendor_id | head -n 1`
         cpu_type=`sed "s/vendor_id : //g" <<< $cpu_string`
 
         case $cpu_type in
         GenuineIntel)
-                params='rd.driver.pre=vfio-pci intel_iommu=on vfio_iommu_type1 pcie_acs_override=downstream'
+                params="$params intel_iommu=on"
                 ;;
         AuthenticAMD)
-                params='rd.driver.pre=vfio-pci amd_iommu=on vfio_iommu_type1 pcie_acs_override=downstream iommu=pt iommu=1'
+                params="$params amd_iommu=on"
                 ;;
 	*)
 		echo "Unknown processor. Please contribute to this script!"
@@ -27,7 +30,7 @@ function get_params1 ()
 		;;
         esac
 
-        echo "CPU is \"$cpu_type\". Boot params will include: \"$params\"."
+        echo "CPU is \"$cpu_type\". Kernel params will include: \"$params\"."
         echo "Is this correct? (y)es/(n)o/(s)kip"
         read input_cpu
 
@@ -39,32 +42,67 @@ function get_params1 ()
                 exit
                 ;;
 	s*)
-		echo "Skipping boot param modifications"
+		echo "Skipping kernel param modifications"
 		params=""
 		;;
         *)
                 echo "Invalid Input"
-                get_params1
+                get_cpu_params
                 ;;
         esac
 }
 
-function get_params2 ()
+function get_unsafe_interrupts ()
 {
         echo "Allow unsafe interupts? (y)es/(n)o"
         read input_unsafe
 
         case $input_unsafe in
         y*)
-                params="$params allow_unsafe_interrupts=1"
-                echo "Boot parameters will include: \"$params\"."
+                params="$params vfio_iommu_type1.allow_unsafe_interrupts=1"
                 ;;
         n*)
-                echo "Boot parameters will include: \"$params\"."
+		params="$params vfio_iommu_type1"
                 ;;
         *)
                 echo "Invalid Input"
-                get_params2
+                get_unsafe_interrupts
+                ;;
+        esac
+}
+
+function get_iommu ()
+{
+        echo "iommu=pt? (y)es/(n)o"
+        read input_iommu
+
+        case $input_iommu in
+        y*)
+                params="$params iommu=pt"
+                ;;
+        n*)
+                ;;
+        *)
+                echo "Invalid Input"
+                get_iommu
+                ;;
+        esac
+}
+
+function get_acs_override ()
+{
+        echo "pcie_acs_override=downstream? (y)es/(n)o"
+        read input_acs_override
+
+        case $input_acs_override in
+        y*)
+                params="$params pcie_acs_override=downstream"
+                ;;
+        n*)
+                ;;
+        *)
+                echo "Invalid Input"
+                get_acs_override
                 ;;
         esac
 }
@@ -83,51 +121,53 @@ function add_params ()
 	mv /etc/default/grub.tmp /etc/default/grub
 }
 
+function update_modprobe ()
+{
+	if [ ! -e /etc/modprobe.d/local.conf.orig ]
+	then
+	        cp /etc/modprobe.d/local.conf /etc/modprobe.d/local.conf.orig
+	fi
+	cp -f ./vfio-pci-override-vga.sh /sbin/
+	chmod 775 /sbin/vfio-pci-override-vga.sh
+	echo 'install vfio-pci /sbin/vfio-pci-override-vga.sh' > /etc/modprobe.d/local.conf
+}
 
-print_warning
-backup_grub
-get_params1
-if [ ! "$params" == "" ]
-then
-	get_params2
-	add_params
-fi
+function update_dracut ()
+{
+	if [ ! -e /etc/dracut.conf.d/local.conf.orig ]
+	then
+        	cp /etc/dracut.conf.d/local.conf /etc/dracut.conf.d/local.conf.orig
+	fi
+	echo 'add_drivers+="vfio vfio_iommu_type1 vfio_pci vfio_virqfd"' > /etc/dracut.conf.d/local.conf
+	echo 'install_items+="/sbin/vfio-pci-override-vga.sh"' >> /etc/dracut.conf.d/local.conf
+	dracut -fv --kver `uname -r`
+}
 
-echo "Press \"Enter\" to continue, or ctrl+c to quit."
-read
+function main ()
+{
+	print_warning
+	backup_grub
+	
+	# Figure out kernel params
+	get_cpu_params
+	if [ ! "$params" == "" ]
+	then
+		get_iommu
+		get_acs_override
+		get_unsafe_interrupts
+		add_params
+		echo "Kernel parameters will include: \"$params\"."
+	fi
 
-# Back up /etc/modprobe.d/local.conf if it exists
-# Add /etc/modprobe.d/local.conf
+	echo "Press \"Enter\" to continue, or ctrl+c to quit."
+	read
 
-if [ ! -e /etc/modprobe.d/local.conf.orig ]
-then
-	cp /etc/modprobe.d/local.conf /etc/modprobe.d/local.conf.orig
-fi
-cp -f ./vfio-pci-override-vga.sh /sbin/
-chmod 775 /sbin/vfio-pci-override-vga.sh
-echo 'install vfio-pci /sbin/vfio-pci-override-vga.sh' > /etc/modprobe.d/local.conf
+	update_modprobe
+	grub2-mkconfig -o /boot/grub2/grub.cfg
+	update_dracut
+	cp -f ./qemu-kvm.vga /usr/bin/qemu-kvm.vga
 
+	echo "Done. To use vga-passthrough with virt-manager, "virsh edit" to modify <emulator> contents to /usr/bin/qemu-kvm.vga"
+}
 
-# Update grub config
-
-grub2-mkconfig -o /boot/grub2/grub.cfg
-
-
-# Back up /etc/dracut.conf.d/local.conf if it exists
-# Update dracut
-
-if [ ! -e /etc/dracut.conf.d/local.conf.orig ]
-then
-        cp /etc/dracut.conf.d/local.conf /etc/dracut.conf.d/local.conf.orig
-fi
-echo 'add_drivers+="vfio vfio_iommu_type1 vfio_pci vfio_virqfd"' > /etc/dracut.conf.d/local.conf
-echo 'install_items+="/sbin/vfio-pci-override-vga.sh"' >> /etc/dracut.conf.d/local.conf
-dracut -fv --kver `uname -r`
-
-
-# Copy wrapper script
-
-cp -f ./qemu-kvm.vga /usr/bin/qemu-kvm.vga
-
-
-# To use vga-passthrough with virt-manager, "virsh edit" to modify <emulator> contents to /usr/bin/qemu-kvm.vga
+main
