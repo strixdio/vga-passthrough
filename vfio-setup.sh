@@ -117,8 +117,12 @@ function backup_grub ()
 
 function add_params ()
 {
-	sed "s/GRUB_CMDLINE_LINUX=\"\(.*\)\"/GRUB_CMDLINE_LINUX=\"\1 $params\"/" /etc/default/grub.orig > /etc/default/grub.tmp
-	mv /etc/default/grub.tmp /etc/default/grub
+	grub="/etc/default/grub"	
+        grep -v "GRUB_CMDLINE_LINUX_DEFAULT=" $grub > $grub.tmp
+        mv -f $grub.tmp $grub
+        echo "GRUB_CMDLINE_LINUX_DEFAULT=\"\"" >> $grub
+        sed "s/GRUB_CMDLINE_LINUX_DEFAULT=\"\(.*\)\"/GRUB_CMDLINE_LINUX_DEFAULT=\"\1$params\"/" $grub > $grub.tmp
+        mv -f $grub.tmp $grub
 }
 
 function update_modprobe ()
