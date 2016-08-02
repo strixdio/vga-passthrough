@@ -127,23 +127,23 @@ function add_params ()
 
 function update_modprobe ()
 {
-	if [ ! -e /etc/modprobe.d/local.conf.orig ]
+	if [ ! -e /etc/modprobe.d/vfio.conf.orig ]
 	then
-	        cp /etc/modprobe.d/local.conf /etc/modprobe.d/local.conf.orig
+	        cp /etc/modprobe.d/vfio.conf /etc/modprobe.d/vfio.conf.orig
 	fi
 	cp -f ./vfio-pci-override-vga.sh /sbin/
 	chmod 775 /sbin/vfio-pci-override-vga.sh
-	echo 'install vfio-pci /sbin/vfio-pci-override-vga.sh' > /etc/modprobe.d/local.conf
+	echo 'install vfio-pci /sbin/vfio-pci-override-vga.sh' > /etc/modprobe.d/vfio.conf
 }
 
 function update_dracut ()
 {
-	if [ ! -e /etc/dracut.conf.d/local.conf.orig ]
+	if [ ! -e /etc/dracut.conf.d/vfio.conf.orig ]
 	then
-        	cp /etc/dracut.conf.d/local.conf /etc/dracut.conf.d/local.conf.orig
+        	cp /etc/dracut.conf.d/vfio.conf /etc/dracut.conf.d/vfio.conf.orig
 	fi
-	echo 'add_drivers+="vfio vfio_iommu_type1 vfio_pci vfio_virqfd"' > /etc/dracut.conf.d/local.conf
-	echo 'install_items+="/sbin/vfio-pci-override-vga.sh"' >> /etc/dracut.conf.d/local.conf
+	echo 'add_drivers+="vfio vfio_iommu_type1 vfio_pci vfio_virqfd"' > /etc/dracut.conf.d/vfio.conf
+	echo 'install_items+="/sbin/vfio-pci-override-vga.sh"' >> /etc/dracut.conf.d/vfio.conf
 	dracut -fv --kver `uname -r`
 }
 
