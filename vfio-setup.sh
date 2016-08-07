@@ -43,7 +43,7 @@ function select_gpus()
 
 function print_uselist()
 {
-	echo "Using:"
+	echo -e "\nUsing:"
         for i in $uselist
         do
                 find=$(awk -F'.' '{ print $1 }' <<< $i)
@@ -138,59 +138,29 @@ function get_cpu_params ()
         esac
 }
 
-function get_unsafe_interrupts ()
+function select_params()
 {
-        echo "Allow unsafe interupts? (y)es/(n)o"
-        read input_unsafe
-
-        case $input_unsafe in
-        y*)
-                params="$params vfio_iommu_type1.allow_unsafe_interrupts=1"
+	echo -e "\nSelect additional kernel params you wish to use. 'd' for done.\nPlease make sure you research each option, and only use those that are required for your setup.\n"
+	paramlist="iommu=pt vfio_iommu_type1.allow_unsafe_interrupts=1 pcie_acs_override=downstream"
+	select param in $paramlist
+	do
+		case $param in
+                "$QUIT")
+                        break
                 ;;
-        n*)
-		params="$params vfio_iommu_type1"
+                *)
+                        if [[ ! $paramuselist == *$param* ]]
+                        then
+                                paramuselist="$paramuselist $param"
+                        else
+                                paramuselist=`sed "s/$param//g" <<< $paramuselist`
+                        fi
+                        paramuselist=$(tidy_string $paramuselist)
+                        echo "Additional kernel params: $paramuselist"
                 ;;
-        *)
-                echo "Invalid Input"
-                get_unsafe_interrupts
-                ;;
-        esac
-}
-
-function get_iommu ()
-{
-        echo "iommu=pt? (y)es/(n)o"
-        read input_iommu
-
-        case $input_iommu in
-        y*)
-                params="$params iommu=pt"
-                ;;
-        n*)
-                ;;
-        *)
-                echo "Invalid Input"
-                get_iommu
-                ;;
-        esac
-}
-
-function get_acs_override ()
-{
-        echo "pcie_acs_override=downstream? (y)es/(n)o"
-        read input_acs_override
-
-        case $input_acs_override in
-        y*)
-                params="$params pcie_acs_override=downstream"
-                ;;
-        n*)
-                ;;
-        *)
-                echo "Invalid Input"
-                get_acs_override
-                ;;
-        esac
+                esac
+	done
+	params=$(tidy_string "$params $paramuselist")
 }
 
 function backup_grub ()
@@ -250,9 +220,7 @@ function main ()
 	get_cpu_params
 	if [ ! "$params" == "" ]
 	then
-		get_iommu
-		get_acs_override
-		get_unsafe_interrupts
+		select_params
 		add_params
 		echo "Kernel parameters will include: \"$params\"."
 	fi
