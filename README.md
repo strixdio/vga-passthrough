@@ -11,6 +11,3 @@
 # This script assumes that you are not using any GRUB_CMDLINE_LINUX_DEFAULT params
 # This script assumes that /etc/modprobe.d/vfio.conf either does not exist, or is not needed in its current configuration.
 # This script assumes that /etc/dracut.conf.d/vfio.conf either does not exist, or is not needed in its current configuration.
-# This script assumes that you are using an intel processor. Please modify the relevant boot params to suit your processor.
-
-# Once all edits are made to suit your use case, and all code is audited that it will not cause any harm, simply run: vfio-setup.sh
