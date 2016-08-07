@@ -12,43 +12,40 @@ function tidy_string()
         echo $(sed -e 's/  / /g' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< $@ | tr '\n' ' ')
 }
 
-function get_gpus()
+function backup_grub ()
+{
+        if [ ! -e /etc/default/grub.orig ]
+        then
+                cp -f /etc/default/grub /etc/default/grub.orig
+        fi
+}
+
+function update_modprobe ()
+{
+        if [ ! -e /etc/modprobe.d/vfio.conf.orig ]
+        then
+                cp -f /etc/modprobe.d/vfio.conf /etc/modprobe.d/vfio.conf.orig
+        fi
+        echo "Creating /sbin/vfio-pci-override-vga.sh ..."
+        cp -f ./vfio-pci-override-vga.sh.gen /sbin/vfio-pci-override-vga.sh
+        chmod 775 /sbin/vfio-pci-override-vga.sh
+        echo 'install vfio-pci /sbin/vfio-pci-override-vga.sh' > /etc/modprobe.d/vfio.conf
+}
+
+function update_dracut ()
+{
+        if [ ! -e /etc/dracut.conf.d/vfio.conf.orig ]
+        then
+                cp -f /etc/dracut.conf.d/vfio.conf /etc/dracut.conf.d/vfio.conf.orig
+        fi
+        echo 'add_drivers+="vfio vfio_iommu_type1 vfio_pci vfio_virqfd"' > /etc/dracut.conf.d/vfio.conf
+        echo 'install_items+="/sbin/vfio-pci-override-vga.sh"' >> /etc/dracut.conf.d/vfio.conf
+        dracut -fv --kver `uname -r`
+}
+
+function get_gpulist()
 {
         gpulist=$(lspci -m | grep VGA | awk -F' ' '{ print $1 }')
-}
-
-function select_gpus()
-{
-        echo -e "\nSelect GPU(s) you wish to use for vga-passthrough. 'd' for done."
-        select gpu in $gpulist
-        do
-                case $gpu in
-                "$QUIT")
-                        break
-                ;;
-                *)
-                        if [[ ! $uselist == *$gpu* ]]
-                        then
-                                uselist="$uselist $gpu"
-                        else
-                                uselist=`sed "s/$gpu//g" <<< $uselist`
-                        fi
-                        uselist=$(tidy_string $uselist)
-                        echo "Selected: $uselist"
-                ;;
-                esac
-        done
-        print_uselist
-}
-
-function print_uselist()
-{
-	echo -e "\nUsing:"
-        for i in $uselist
-        do
-                find=$(awk -F'.' '{ print $1 }' <<< $i)
-                echo "$(lspci -m | grep $find)"
-        done
 }
 
 function print_gpulist()
@@ -62,11 +59,45 @@ function print_gpulist()
         done
 }
 
+function select_gpus()
+{
+        echo -e "\nSelect GPU(s) you wish to use for vga-passthrough. 'd' for done."
+        select gpu in $gpulist
+        do
+                case $gpu in
+                "$QUIT")
+                        break
+                ;;
+                *)
+                        if [[ ! $gpu_uselist == *$gpu* ]]
+                        then
+                                gpu_uselist="$gpu_uselist $gpu"
+                        else
+                                gpu_uselist=`sed "s/$gpu//g" <<< $gpu_uselist`
+                        fi
+                        gpu_uselist=$(tidy_string $gpu_uselist)
+                        echo "Selected: $gpu_uselist"
+                ;;
+                esac
+        done
+        print_gpu_uselist
+}
+
+function print_gpu_uselist()
+{
+	echo -e "\nUsing:"
+        for i in $gpu_uselist
+        do
+                find=$(awk -F'.' '{ print $1 }' <<< $i)
+                echo "$(lspci -m | grep $find)"
+        done
+}
+
 function gen_wrapper()
 {
         cmd_list=""
         cmd_sed=" | sed 's|aAaA|aAaA,x-vga=on|g'"
-        for i in $uselist
+        for i in $gpu_uselist
         do
                 cmd_replace=$(sed "s/aAaA/$i/g" <<< $cmd_sed)
                 cmd_list="$cmd_list $cmd_replace"
@@ -82,12 +113,17 @@ function gen_wrapper()
 
 function gen_override()
 {
-        for i in $uselist
+        for i in $gpu_uselist
         do
                 find=$(awk -F'.' '{ print $1 }' <<< $i)
                 cmd_devs=$(tidy_string "$cmd_devs $(lspci -m | grep $find | awk -F' ' '{ print $1}')")
         done
-	
+	for i in $cmd_devs
+	do
+		tmp=$(tidy_string "$tmp 0000:$i")
+	done
+	cmd_devs=$tmp
+
 	echo -e "#!/bin/sh\n\nDEVS=\"aAaA\"\nfor DEV in \$DEVS; do\n	echo \"vfio-pci\" > /sys/bus/pci/devices/\$DEV/driver_override\ndone\nmodprobe -i vfio-pci" | sed "s/aAaA/$cmd_devs/g" > ./vfio-pci-override-vga.sh.gen
 
 	#echo -e "#!/bin/sh\n" > ./$file
@@ -141,34 +177,26 @@ function get_cpu_params ()
 function select_params()
 {
 	echo -e "\nSelect additional kernel params you wish to use. 'd' for done.\nPlease make sure you research each option, and only use those that are required for your setup.\n"
-	paramlist="iommu=pt vfio_iommu_type1.allow_unsafe_interrupts=1 pcie_acs_override=downstream"
-	select param in $paramlist
+	param_list="iommu=pt vfio_iommu_type1.allow_unsafe_interrupts=1 pcie_acs_override=downstream"
+	select param in $param_list
 	do
 		case $param in
                 "$QUIT")
                         break
                 ;;
                 *)
-                        if [[ ! $paramuselist == *$param* ]]
+                        if [[ ! $param_uselist == *$param* ]]
                         then
-                                paramuselist="$paramuselist $param"
+                                param_uselist="$param_uselist $param"
                         else
-                                paramuselist=`sed "s/$param//g" <<< $paramuselist`
+                                param_uselist=`sed "s/$param//g" <<< $param_uselist`
                         fi
-                        paramuselist=$(tidy_string $paramuselist)
-                        echo "Additional kernel params: $paramuselist"
+                        param_uselist=$(tidy_string $param_uselist)
+                        echo "Additional kernel params: $param_uselist"
                 ;;
                 esac
 	done
-	params=$(tidy_string "$params $paramuselist")
-}
-
-function backup_grub ()
-{
-	if [ ! -e /etc/default/grub.orig ]
-	then
-		cp -f /etc/default/grub /etc/default/grub.orig
-	fi
+	params=$(tidy_string "$params $param_uselist")
 }
 
 function add_params ()
@@ -181,42 +209,16 @@ function add_params ()
         mv -f $grub.tmp $grub
 }
 
-function update_modprobe ()
-{
-	if [ ! -e /etc/modprobe.d/vfio.conf.orig ]
-	then
-	        cp -f /etc/modprobe.d/vfio.conf /etc/modprobe.d/vfio.conf.orig
-	fi
-	echo "Creating /sbin/vfio-pci-override-vga.sh ..."
-	cp -f ./vfio-pci-override-vga.sh.gen /sbin/vfio-pci-override-vga.sh
-	chmod 775 /sbin/vfio-pci-override-vga.sh
-	echo 'install vfio-pci /sbin/vfio-pci-override-vga.sh' > /etc/modprobe.d/vfio.conf
-}
-
-function update_dracut ()
-{
-	if [ ! -e /etc/dracut.conf.d/vfio.conf.orig ]
-	then
-        	cp -f /etc/dracut.conf.d/vfio.conf /etc/dracut.conf.d/vfio.conf.orig
-	fi
-	echo 'add_drivers+="vfio vfio_iommu_type1 vfio_pci vfio_virqfd"' > /etc/dracut.conf.d/vfio.conf
-	echo 'install_items+="/sbin/vfio-pci-override-vga.sh"' >> /etc/dracut.conf.d/vfio.conf
-	dracut -fv --kver `uname -r`
-}
-
 function main ()
 {
 	print_warning
-	backup_grub
-	
-        get_gpus
+	backup_grub	
+        get_gpulist
         print_gpulist
         select_gpus
         gen_wrapper
         gen_override
 	echo
-
-	# Figure out kernel params
 	get_cpu_params
 	if [ ! "$params" == "" ]
 	then
@@ -224,10 +226,8 @@ function main ()
 		add_params
 		echo "Kernel parameters will include: \"$params\"."
 	fi
-
 	echo "Press \"Enter\" to continue, or ctrl+c to quit."
 	read
-
 	update_modprobe
 	grub2-mkconfig -o /boot/grub2/grub.cfg
 	update_dracut
