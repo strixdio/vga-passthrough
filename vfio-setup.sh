@@ -1,15 +1,9 @@
 #!/bin/sh
 
-
-uselist=""
-gpulist=""
-
 function print_warning ()
 {
 	clear
-	echo "Make sure your boot partion is mounted BEFORE continuing with this script!"
-	echo "Press \"Enter\" to continue, or ctrl+c to quit."
-	echo
+	echo -e "Make sure your boot partion is mounted BEFORE continuing with this script!\nPress \"Enter\" to continue, or ctrl+c to quit.\n"
 	read
 }
 
@@ -25,8 +19,7 @@ function get_gpus()
 
 function select_gpus()
 {
-        echo
-        echo "Select GPU(s) you wish to use for vga-passthrough. 'd' for done."
+        echo -e "\nSelect GPU(s) you wish to use for vga-passthrough. 'd' for done."
         select gpu in $gpulist
         do
                 case $gpu in
@@ -84,9 +77,7 @@ function gen_wrapper()
 	else
 		cmd="exec /usr/bin/qemu-system-x86_64 \`echo \"\$@\"$cmd_list\`"
 	fi
-	echo "#!/bin/bash" > ./qemu-kvm.vga.gen
-	echo "" >> ./qemu-kvm.vga.gen
-        echo $cmd >> ./qemu-kvm.vga.gen
+	echo -e "#!/bin/bash\n\n$cmd" > ./qemu-kvm.vga.gen
 }
 
 function gen_override()
@@ -97,16 +88,11 @@ function gen_override()
                 cmd_devs=$(tidy_string "$cmd_devs $(lspci -m | grep $find | awk -F' ' '{ print $1}')")
         done
 	
-	echo "#!/bin/sh" > ./vfio-pci-override-vga.sh.gen
-	echo "" >> ./vfio-pci-override-vga.sh.gen
-	echo "DEVS=\"aAaA\"" | sed "s/aAaA/$cmd_devs/g" >> ./vfio-pci-override-vga.sh.gen
-	echo "" >> ./vfio-pci-override-vga.sh.gen
-	echo "for DEV in \$DEVS; do" >> ./vfio-pci-override-vga.sh.gen
-    	echo "	echo \"vfio-pci\" > /sys/bus/pci/devices/\$DEV/driver_override" >> ./vfio-pci-override-vga.sh.gen
-	echo "done" >> ./vfio-pci-override-vga.sh.gen
-	echo "" >> ./vfio-pci-override-vga.sh.gen
-	echo "modprobe -i vfio-pci" >> ./vfio-pci-override-vga.sh.gen
-        #sed -i "s/aAaA/$cmd_devs/g" ./vfio-pci-override-vga.sh.gen > ./vfio-pci-override-vga.sh.gen
+	echo -e "#!/bin/sh\n\nDEVS=\"aAaA\"\nfor DEV in \$DEVS; do\n	echo \"vfio-pci\" > /sys/bus/pci/devices/\$DEV/driver_override\ndone\nmodprobe -i vfio-pci" | sed "s/aAaA/$cmd_devs/g" > ./vfio-pci-override-vga.sh.gen
+
+	#echo -e "#!/bin/sh\n" > ./$file
+        #echo "DEVS=\"aAaA\"" | sed "s/aAaA/$cmd_devs/g" >> ./$file
+        #echo -e "for DEV in \$DEVS; do\n        echo \"vfio-pci\" > /sys/bus/pci/devices/\$DEV/driver_override\ndone\nmodprobe -i vfio-pci" >> ./$file
 }
 
 function get_cpu_params ()
@@ -211,7 +197,7 @@ function backup_grub ()
 {
 	if [ ! -e /etc/default/grub.orig ]
 	then
-		cp /etc/default/grub /etc/default/grub.orig
+		cp -f /etc/default/grub /etc/default/grub.orig
 	fi
 }
 
@@ -229,8 +215,9 @@ function update_modprobe ()
 {
 	if [ ! -e /etc/modprobe.d/vfio.conf.orig ]
 	then
-	        cp /etc/modprobe.d/vfio.conf /etc/modprobe.d/vfio.conf.orig
+	        cp -f /etc/modprobe.d/vfio.conf /etc/modprobe.d/vfio.conf.orig
 	fi
+	echo "Creating /sbin/vfio-pci-override-vga.sh ..."
 	cp -f ./vfio-pci-override-vga.sh.gen /sbin/vfio-pci-override-vga.sh
 	chmod 775 /sbin/vfio-pci-override-vga.sh
 	echo 'install vfio-pci /sbin/vfio-pci-override-vga.sh' > /etc/modprobe.d/vfio.conf
@@ -240,7 +227,7 @@ function update_dracut ()
 {
 	if [ ! -e /etc/dracut.conf.d/vfio.conf.orig ]
 	then
-        	cp /etc/dracut.conf.d/vfio.conf /etc/dracut.conf.d/vfio.conf.orig
+        	cp -f /etc/dracut.conf.d/vfio.conf /etc/dracut.conf.d/vfio.conf.orig
 	fi
 	echo 'add_drivers+="vfio vfio_iommu_type1 vfio_pci vfio_virqfd"' > /etc/dracut.conf.d/vfio.conf
 	echo 'install_items+="/sbin/vfio-pci-override-vga.sh"' >> /etc/dracut.conf.d/vfio.conf
@@ -276,9 +263,12 @@ function main ()
 	update_modprobe
 	grub2-mkconfig -o /boot/grub2/grub.cfg
 	update_dracut
+	echo "Creating /usr/bin/qemu-kvm.vga ..."
 	cp -f ./qemu-kvm.vga.gen /usr/bin/qemu-kvm.vga
 	rm -rf ./qemu-kvm.vga.gen vfio-pci-override-vga.sh.gen
 	echo "Done. To use vga-passthrough with virt-manager, "virsh edit" to modify <emulator> contents to /usr/bin/qemu-kvm.vga"
 }
 
+
+# Run the main loop
 main
